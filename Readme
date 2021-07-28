@@ -1,0 +1,3 @@
+sudo apt-get install libtcmalloc-minimal4
+export LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc_minimal.so.4"
+
