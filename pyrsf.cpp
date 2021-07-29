@@ -214,6 +214,10 @@ bool PyLibRSF::ParseErrorModel(const std::string &ErrorModel)
   return true;
 }
 
+int PyLibRSF::teste(int a){
+  return a*a;
+}
+
 void PyLibRSF::solve(double Timestamp){
 
   Graph.solve(SolverOptions);
@@ -232,7 +236,7 @@ void PyLibRSF::solve(double Timestamp){
 PYBIND11_MODULE(pylibrsf, m) {
    py::class_<PyLibRSF>(m, "PyLibRSF")
       .def(py::init<std::string>())
-      .def("addMeasurement", &PyLibRSF::addMeasurement);    
+      .def("teste", &PyLibRSF::teste);    
 }  
 
 

@@ -15,18 +15,24 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/../cmake)
 
 #set (CMAKE_CXX_FLAGS "-Q")
 
+
+
 #add_compile_options( -Ofast)
 add_compile_options( -g)
 
 find_package(Ceres 2.0 REQUIRED)
 find_package(Eigen3 3.3.5 REQUIRED NO_MODULE)
 
-find_package(PythonInterp ${3.6} REQUIRED)
-find_package(PythonLibs ${3.6} REQUIRED)
-#find_package(Python3)
+
+find_package(PythonInterp 3.8)
+find_package(PythonLibs 3.8)
+find_package(Python3)
 find_package(pybind11 REQUIRED)
+#find_package (Python3 COMPONENTS Interpreter Development)
+
 find_package(libRSF REQUIRED)
 
+message(${PYTHON_INCLUDE_DIR})
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/../include
@@ -36,9 +42,7 @@ include_directories(
 
 pybind11_add_module(pylibrsf MODULE pyrsf.cpp)
 
-target_link_libraries(pylibrsf PUBLIC pybind11::module libRSF)
-
-
+target_link_libraries(pylibrsf PUBLIC pybind11::module libRSF Ceres::ceres Eigen3::Eigen yaml-cpp)
 
 add_custom_command(
         TARGET pylibrsf

@@ -11,6 +11,7 @@
 
 class PyLibRSF{
   public:
+
     PyLibRSF(std::string alg);
     void setInitialPose(double x, double y, double tetha, std::vector<float> covariance);
     void addOdometry(double Timestamp, double TimestampOld, vector<double> &mean, double wheelbase, vector<double> &covariance);
@@ -18,6 +19,7 @@ class PyLibRSF{
     void tuneErrorModel();
     bool ParseErrorModel(const std::string &ErrorModel);
     void solve(double Timestamp);
+    int teste(int a);
     
 
   private:
