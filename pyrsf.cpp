@@ -17,43 +17,109 @@ PyLibRSF::PyLibRSF(std::string alg){
   SolverOptions.max_num_iterations = 1000;
   SolverOptions.num_threads = 1;
   SolverOptions.max_solver_time_in_seconds = 0.25;
-  
+  counter = 0;
   ParseErrorModel(alg);
 
 }
+void PyLibRSF::addStates(double Timestamp){
+  Graph.addState(POSITION_STATE, libRSF::DataType::Point2, Timestamp);
+  Graph.addState(ORIENTATION_STATE, libRSF::DataType::Angle, Timestamp);
 
-void setInitialPose(double x, double y, double tetha, std::vector<float> covariance){
+}
+void PyLibRSF::setInitialPose(double Timestamp, double x, double y, double tetha, std::vector<float> covariance){
+
+  Graph.addState(POSITION_STATE, libRSF::DataType::Point2, Timestamp);
+  Graph.addState(ORIENTATION_STATE, libRSF::DataType::Angle, Timestamp);
+
+  ceres::Vector pose(2), yaw(1);
+  pose << x, y;
+  yaw << tetha;
+
+
+  libRSF::Data prior_pose = libRSF::Data(libRSF::DataType::Error2, 0);
+  libRSF::Data prior_yaw = libRSF::Data(libRSF::DataType::Error1, 0);
+
+
+  prior_pose.setValue(libRSF::DataElement::Mean, pose);
+  prior_yaw.setValue(libRSF::DataElement::Mean, yaw);
+
+  //POSITION_STATE
+  libRSF::StateList PoseList;
+  PoseList.add(POSITION_STATE, Timestamp);
+  
+  libRSF::GaussianDiagonal<2> noisePrior2;
+  ceres::Vector std2(2); std2 << covariance[0], covariance[1]; 
+  noisePrior2.setStdDevDiagonal(std2);
+
+  Graph.addFactor<libRSF::FactorType::Prior2>(PoseList, prior_pose, noisePrior2);
+
+
+
+  //ORIENTATION_STATE
+  libRSF::StateList YawList;
+  YawList.add(ORIENTATION_STATE, Timestamp);
+  
+  libRSF::GaussianDiagonal<1> noisePrior1;
+  ceres::Vector std1(1); std1 << covariance[2]; 
+  noisePrior1.setStdDevDiagonal(std1);
+
+  Graph.addFactor<libRSF::FactorType::PriorAngle>(YawList, prior_yaw, noisePrior1);
+
 }
 
 
-void PyLibRSF::addMeasurement(double Timestamp, std::vector<vector<double>> positions, std::vector<double> range, std::vector<double> covariance){
+void PyLibRSF::addMeasurement(double Timestamp, std::vector<vector<double>> &positions, std::vector<double> &range, std::vector<double> &L, std::vector<double> &covariance){
   
   libRSF::StateList ListRange;
   libRSF::Data Range(libRSF::DataType::Range2, Timestamp);
   libRSF::GaussianDiagonal<1> NoiseRange;
+  libRSF::CorrentropyDiagonal<1> CorrNoiseRange;
+
 
   ListRange.add(POSITION_STATE, Timestamp);
-
+  ListRange.add(ORIENTATION_STATE, Timestamp);
+ 
+  
   /** default error model */
   static libRSF::GaussianMixture<1> GMM((libRSF::Vector2() << 0, 0).finished(),
                                          (libRSF::Vector2() << 0.1, 1.0).finished(),
                                          (libRSF::Vector2() << 0.5, 0.5).finished());
 
+  counter++;
   for( int i = 0; i < range.size(); ++i){
     ceres::Vector mean_v(1); mean_v << range[i];
-    ceres::Vector pos_v(2); pos_v << positions[i][0], positions[i][1];
+    ceres::Vector pos_v(3); pos_v << positions[i][0], positions[i][1], 0;
     ceres::Vector cov_v(1); cov_v << covariance[i];
-    
+    ceres::Vector L_v(1); L_v << L[i];
+
+
+
     Range.setValue(libRSF::DataElement::Mean, mean_v);
     Range.setValue(libRSF::DataElement::SatPos, pos_v);
-
+    Range.setValue(libRSF::DataElement::L, L_v);
+    
     
     /** add factor */
     switch(Config.Ranging.ErrorModel.Type)
     {
       case libRSF::ErrorModelType::Gaussian:
-        NoiseRange.setStdDevDiagonal(cov_v);
+        NoiseRange.setStdDevDiagonal(cov_v*sqrt(range.size()));
         Graph.addFactor<libRSF::FactorType::Range2>(ListRange, Range, NoiseRange);
+        break;
+      
+      case libRSF::ErrorModelType::Corr:
+        {
+          if(counter > 20){
+            CorrNoiseRange.setParams(0, 1);
+            CorrNoiseRange.setStdDevDiagonal(cov_v*sqrt(range.size()));
+            
+            Graph.addFactor<libRSF::FactorType::Range2>(ListRange, Range, CorrNoiseRange);
+          }else{
+            NoiseRange.setStdDevDiagonal(cov_v*sqrt(range.size()));
+            Graph.addFactor<libRSF::FactorType::Range2>(ListRange, Range, NoiseRange);
+          }
+       }
+
         break;
 
       case libRSF::ErrorModelType::DCS:
@@ -171,6 +237,10 @@ bool PyLibRSF::ParseErrorModel(const std::string &ErrorModel)
     Config.Ranging.ErrorModel.Type = libRSF::ErrorModelType::Gaussian;
     Config.Ranging.ErrorModel.TuningType = libRSF::ErrorModelTuningType::None;
   }
+  else if(ErrorModel.compare("corr") == 0){
+    Config.Ranging.ErrorModel.Type = libRSF::ErrorModelType::Corr;
+    Config.Ranging.ErrorModel.TuningType = libRSF::ErrorModelTuningType::None;
+  }
   else if(ErrorModel.compare("dcs") == 0)
   {
     Config.Ranging.ErrorModel.Type = libRSF::ErrorModelType::DCS;
@@ -214,21 +284,26 @@ bool PyLibRSF::ParseErrorModel(const std::string &ErrorModel)
   return true;
 }
 
-int PyLibRSF::teste(int a){
-  return a*a;
+int PyLibRSF::teste(vector<double> &mean){
+  return mean[0]*mean[1];
 }
 
-void PyLibRSF::solve(double Timestamp){
+void PyLibRSF::solve(double Timestamp, double Window){
 
   Graph.solve(SolverOptions);
    
   /** apply sliding window */
-  Graph.removeAllFactorsOutsideWindow(60, Timestamp);
-  Graph.removeAllStatesOutsideWindow(60, Timestamp);
+  Graph.marginalizeAllStatesOutsideWindow(Window, Timestamp);
+  Graph.removeAllFactorsOutsideWindow(Window, Timestamp);
 }
 
+std::vector<double> PyLibRSF::getState(double Timestamp){
+  auto state_position = Graph.getStateData().getElement(POSITION_STATE, Timestamp, 0).getMean();
+  auto state_orientation = Graph.getStateData().getElement(ORIENTATION_STATE, Timestamp, 0).getMean();
 
-
+  return {state_position[0], state_position[1], state_orientation[0]};
+}
+    
 
 
 //PYBIND11_MAKE_OPAQUE(std::string);
@@ -236,6 +311,13 @@ void PyLibRSF::solve(double Timestamp){
 PYBIND11_MODULE(pylibrsf, m) {
    py::class_<PyLibRSF>(m, "PyLibRSF")
       .def(py::init<std::string>())
+      .def("setInitialPose", &PyLibRSF::setInitialPose)
+      .def("addStates", &PyLibRSF::addStates)  
+      .def("addOdometry", &PyLibRSF::addOdometry)  
+      .def("addMeasurement", &PyLibRSF::addMeasurement)  
+      .def("tuneErrorModel", &PyLibRSF::tuneErrorModel)  
+      .def("solve", &PyLibRSF::solve)
+      .def("getState", &PyLibRSF::getState)
       .def("teste", &PyLibRSF::teste);    
 }  
 

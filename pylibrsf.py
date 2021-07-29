@@ -14,7 +14,7 @@ gst_param_ptr       params
 );
 '''
 
-from pylibrsf.pylibrsf import PyLibRSF
+from pylibrsf import PyLibRSF
 
 
 if __name__ == "__main__":
@@ -24,6 +24,6 @@ if __name__ == "__main__":
 
     steiner = PyLibRSF("gauss")
 
-    print(steiner.teste(12))
+    print(steiner.teste([4,5]))
 
 

@@ -28,7 +28,7 @@ find_package(PythonInterp 3.8)
 find_package(PythonLibs 3.8)
 find_package(Python3)
 find_package(pybind11 REQUIRED)
-#find_package (Python3 COMPONENTS Interpreter Development)
+find_package (Python3 COMPONENTS Interpreter Development)
 
 find_package(libRSF REQUIRED)
 
